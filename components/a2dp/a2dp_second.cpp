@@ -130,15 +130,13 @@ static void log_addr_(const char *what, const uint8_t *addr) {
   ESP_LOGI(TAG, "%s %02x:%02x:%02x:%02x:%02x:%02x", what, addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 }
 
-static bool cos_init_(uint8_t seid, uint8_t *codec_type, uint8_t *codec_info, uint8_t *num_protect, uint8_t *protect,
+static bool cos_init_(uint8_t *codec_type, uint8_t *codec_info, uint8_t *num_protect, uint8_t *protect,
                       uint8_t tsep) {
-  // Each register starts at seid 0. Keep one SBC endpoint per stream so the
-  // first registration does not consume both slots.
-  if (seid == 0)
-    seps_taken_ = 0;
+  // Match the native BTA_AV_CO_FUNCTS::init ABI exactly (five arguments).
+  // BTA_AvRegister resets seps_taken_ for each stream registration.
   if (seps_taken_ >= 1)
     return false;
-  const bool ok = bta_av_a2d_cos.init(seid, codec_type, codec_info, num_protect, protect, tsep);
+  const bool ok = bta_av_a2d_cos.init(codec_type, codec_info, num_protect, protect, tsep);
   if (ok)
     seps_taken_++;
   return ok;
@@ -501,6 +499,7 @@ static void register_second_() {
     return;
   second_registered_ = true;
   ESP_LOGI(TAG, "registering second A2DP stream");
+  seps_taken_ = 0;
   __real_BTA_AvRegister(saved_chnl_, "A2DP2", APP_ID_SECOND, second_media_, &our_cos_, saved_rc_, saved_tsep_);
 }
 
@@ -766,6 +765,7 @@ extern "C" void __wrap_BTA_AvRegister(uint8_t chnl, const char *name, uint8_t ap
   // The first stream's audio goes through first_media_ so we can hold it back
   // while the second peer owns the sink.
   stock_data_cb_ = data_cb;
+  seps_taken_ = 0;
   __real_BTA_AvRegister(chnl, name, app_id, first_media_, use, rc_cos, tsep);
 }
 
